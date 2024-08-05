@@ -41,6 +41,7 @@
 #include <misc/ipv4_proto.h>
 #include <misc/ipv6_proto.h>
 #include <misc/udp_proto.h>
+#include <misc/dns_proto.h>
 #include <misc/byteorder.h>
 #include <misc/balloc.h>
 #include <misc/open_standard_streams.h>
@@ -1074,39 +1075,78 @@ void device_read_handler_send (void *unused, uint8_t *data, int data_len)
     }
 }
 
+const char* get_protocol_name(uint8_t protocol){
+    if (protocol == IPV4_PROTOCOL_UDP){
+        return "UDP";
+    }else if (protocol == IPV4_PROTOCOL_TCP){
+        return "TCP";
+    }else if (protocol == IPV4_PROTOCOL_IGMP){
+        return "IGMP";
+    }
+
+    return "UNKNOW";
+}
+
 int process_device_udp_packet (uint8_t *data, int data_len)
 {
     ASSERT(data_len >= 0)
-    
-    // do nothing if we don't use udpgw or SOCKS UDP
-    if (udp_mode == UdpModeNone) {
-        goto fail;
-    }
-    
+
+
     BAddr local_addr;
     BAddr remote_addr;
     int is_dns;
-    
+
     uint8_t ip_version = 0;
+    uint8_t protocol = 0;
+
     if (data_len > 0) {
         ip_version = (data[0] >> 4);
     }
-    
+
+    if (ip_version != 4){
+        BLog(BLOG_INFO, "ignore non-IPv4 packet : %d", ip_version);
+        goto fail;
+    }
+
+    protocol = data[offsetof(struct ipv4_header, protocol)];
+
+    // parse IPv4 header
+    struct ipv4_header ipv4_header;
+    struct udp_header udp_header;
+
     switch (ip_version) {
         case 4: {
             // ignore non-UDP packets
-            if (data_len < sizeof(struct ipv4_header) || data[offsetof(struct ipv4_header, protocol)] != IPV4_PROTOCOL_UDP) {
+            if (data_len < sizeof(struct ipv4_header)) {
                 goto fail;
             }
             
             // parse IPv4 header
-            struct ipv4_header ipv4_header;
             if (!ipv4_check(data, data_len, &ipv4_header, &data, &data_len)) {
                 goto fail;
             }
             
+            // construct addresses
+            BAddr_InitIPv4(&local_addr, ipv4_header.source_address, *(u16_t*)data);
+            BAddr_InitIPv4(&remote_addr, ipv4_header.destination_address, *(u16_t*)(data+2));
+            
+            char local_addr_s[BADDR_MAX_PRINT_LEN];
+            BAddr_Print(&local_addr, local_addr_s);
+            char remote_addr_s[BADDR_MAX_PRINT_LEN];
+            BAddr_Print(&remote_addr, remote_addr_s);
+
+            BLog(BLOG_INFO, "PROTO:%s: from %s -> %s %d bytes",
+                get_protocol_name(protocol),
+                 local_addr_s,
+                 remote_addr_s,
+                 data_len);
+
+                 
+            if (protocol != IPV4_PROTOCOL_UDP){
+                goto fail;
+            }
+                    
             // parse UDP
-            struct udp_header udp_header;
             if (!udp_check(data, data_len, &udp_header, &data, &data_len)) {
                 goto fail;
             }
@@ -1118,64 +1158,47 @@ int process_device_udp_packet (uint8_t *data, int data_len)
             if (checksum_in_packet != checksum_computed) {
                 goto fail;
             }
-            
-            BLog(BLOG_INFO, "UDP: from device %d bytes", data_len);
-            
-            // construct addresses
-            BAddr_InitIPv4(&local_addr, ipv4_header.source_address, udp_header.source_port);
-            BAddr_InitIPv4(&remote_addr, ipv4_header.destination_address, udp_header.dest_port);
+
             
             // if transparent DNS is enabled, any packet arriving at out netif
             // address to port 53 is considered a DNS packet
             is_dns = (options.udpgw_transparent_dns &&
                       ipv4_header.destination_address == netif_ipaddr.ipv4 &&
                       udp_header.dest_port == hton16(53));
-        } break;
-        
-        case 6: {
-            // ignore if IPv6 support is disabled
-            if (!options.netif_ip6addr) {
-                goto fail;
+
+
+            if (udp_header.dest_port == hton16(53)){
+                struct dns_header *h = (struct dns_header *)(data);
+
+                BLog(BLOG_INFO, "DNS %d bytes: %d %d %d %d %d %d",data_len,
+                     h->qr, h->rcode, hton16(h->q_count), h->ans_count, h->auth_count, h->add_count);
+
+                if ( h->qr == 0
+                && h->q_count
+                && h->ans_count == 0
+                && h->auth_count == 0
+                && h->add_count == 0){
+                    BLog(BLOG_INFO, "DNS query tuncate and response");
+                    h->qr =1;
+                    h->tc =1;
+
+                    udp_send_packet_to_device(0, local_addr, remote_addr, data, data_len);
+                }
+
+                return 1;
+
             }
-            
-            // ignore non-UDP packets
-            if (data_len < sizeof(struct ipv6_header) || data[offsetof(struct ipv6_header, next_header)] != IPV6_NEXT_UDP) {
-                goto fail;
-            }
-            
-            // parse IPv6 header
-            struct ipv6_header ipv6_header;
-            if (!ipv6_check(data, data_len, &ipv6_header, &data, &data_len)) {
-                goto fail;
-            }
-            
-            // parse UDP
-            struct udp_header udp_header;
-            if (!udp_check(data, data_len, &udp_header, &data, &data_len)) {
-                goto fail;
-            }
-            
-            // verify UDP checksum
-            uint16_t checksum_in_packet = udp_header.checksum;
-            udp_header.checksum = 0;
-            uint16_t checksum_computed = udp_ip6_checksum(&udp_header, data, data_len, ipv6_header.source_address, ipv6_header.destination_address);
-            if (checksum_in_packet != checksum_computed) {
-                goto fail;
-            }
-            
-            BLog(BLOG_INFO, "UDP/IPv6: from device %d bytes", data_len);
-            
-            // construct addresses
-            BAddr_InitIPv6(&local_addr, ipv6_header.source_address, udp_header.source_port);
-            BAddr_InitIPv6(&remote_addr, ipv6_header.destination_address, udp_header.dest_port);
-            
-            // TODO dns
-            is_dns = 0;
         } break;
         
         default: {
             goto fail;
         } break;
+    }
+
+
+    if (udp_mode == UdpModeNone) {
+        BLog(BLOG_ERROR, "UDP packet received but no UDP mode is enabled");
+        goto fail;
     }
     
     // check payload length
@@ -1193,6 +1216,7 @@ int process_device_udp_packet (uint8_t *data, int data_len)
     }
     
     return 1;
+
     
 fail:
     return 0;
@@ -1851,7 +1875,7 @@ out:
 
 void udp_send_packet_to_device (void *unused, BAddr local_addr, BAddr remote_addr, const uint8_t *data, int data_len)
 {
-    ASSERT(udp_mode != UdpModeNone)
+    //ASSERT(udp_mode != UdpModeNone)
     ASSERT(local_addr.type == BADDR_TYPE_IPV4 || local_addr.type == BADDR_TYPE_IPV6)
     ASSERT(local_addr.type == remote_addr.type)
     ASSERT(data_len >= 0)
@@ -1862,7 +1886,16 @@ void udp_send_packet_to_device (void *unused, BAddr local_addr, BAddr remote_add
     
     switch (local_addr.type) {
         case BADDR_TYPE_IPV4: {
-            BLog(BLOG_INFO, "UDP: from %s %d bytes", source_name, data_len);
+            char local_addr_s[BADDR_MAX_PRINT_LEN];
+            BAddr_Print(&local_addr, local_addr_s);
+            char remote_addr_s[BADDR_MAX_PRINT_LEN];
+            BAddr_Print(&remote_addr, remote_addr_s);
+
+            BLog(BLOG_INFO, "WRITE UDP:  %s -> %s %d bytes",
+                 local_addr_s,
+                 remote_addr_s, 
+                 data_len);
+            //BLog(BLOG_INFO, "WRITE UDP: from %s %d bytes", source_name, data_len);
             
             if (data_len > UINT16_MAX - (sizeof(struct ipv4_header) + sizeof(struct udp_header)) ||
                 data_len > BTap_GetMTU(&device) - (int)(sizeof(struct ipv4_header) + sizeof(struct udp_header))

@@ -1091,11 +1091,6 @@ int process_device_udp_packet (uint8_t *data, int data_len)
 {
     ASSERT(data_len >= 0)
 
-    if (udp_mode == UdpModeNone) {
-        BLog(BLOG_ERROR, "UDP packet received but no UDP mode is enabled");
-        goto fail;
-    }
-
     BAddr local_addr;
     BAddr remote_addr;   
     int is_dns;
@@ -1117,11 +1112,17 @@ int process_device_udp_packet (uint8_t *data, int data_len)
             if (!ipv4_check(data, data_len, &ipv4_header, &data, &data_len)) {
                 goto fail;
             }
+
+            
+            // construct addresses
+            BAddr_InitIPv4(&local_addr, ipv4_header.source_address, *(u16_t*)data);
+            BAddr_InitIPv4(&remote_addr, ipv4_header.destination_address, *(u16_t*)(data+2));
                  
             // ignore non-UDP packets
-            if (ipv4_header.protocol != IPV4_PROTOCOL_UDP){
+            if (ntoh8(ipv4_header.protocol) != IPV4_PROTOCOL_UDP){
                 goto fail;
             }
+
             struct udp_header udp_header; 
             // parse UDP
             if (!udp_check(data, data_len, &udp_header, &data, &data_len)) {
@@ -1136,23 +1137,20 @@ int process_device_udp_packet (uint8_t *data, int data_len)
                 goto fail;
             }
                 
-            // construct addresses
-            BAddr_InitIPv4(&local_addr, ipv4_header.source_address, *(u16_t*)data);
-            BAddr_InitIPv4(&remote_addr, ipv4_header.destination_address, *(u16_t*)(data+2));
-
             if (udp_mode == UdpModeNone) {
                 if (udp_header.dest_port == hton16(53)){
+                    
                     char local_addr_s[BADDR_MAX_PRINT_LEN];
                     BAddr_Print(&local_addr, local_addr_s);
                     char remote_addr_s[BADDR_MAX_PRINT_LEN];
                     BAddr_Print(&remote_addr, remote_addr_s);
 
                     BLog(BLOG_INFO, "PROTO:%s: from %s -> %s payload=%d bytes",
-                        get_protocol_name(ipv4_header.protocol),
+                        get_protocol_name(ntoh8(ipv4_header.protocol)),
                         local_addr_s,
                         remote_addr_s,
                         data_len);
-                    
+                        
                     struct dns_header *h = (struct dns_header *)(data);
                     BLog(BLOG_INFO, "DNS %d bytes: %d %d %d %d %d %d",data_len,
                         h->qr, h->rcode, hton16(h->q_count), h->ans_count, h->auth_count, h->add_count);

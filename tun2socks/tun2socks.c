@@ -1150,7 +1150,7 @@ int process_device_udp_packet (uint8_t *data, int data_len)
                         local_addr_s,
                         remote_addr_s,
                         data_len);
-                        
+
                     struct dns_header *h = (struct dns_header *)(data);
                     BLog(BLOG_INFO, "DNS %d bytes: %d %d %d %d %d %d",data_len,
                         h->qr, h->rcode, hton16(h->q_count), h->ans_count, h->auth_count, h->add_count);
@@ -1160,7 +1160,6 @@ int process_device_udp_packet (uint8_t *data, int data_len)
                     && h->ans_count == 0
                     && h->auth_count == 0
                     && h->add_count == 0){
-                        BLog(BLOG_INFO, "DNS query tuncate and response");
                         h->qr =1;
                         h->tc =1;
                         udp_send_packet_to_device(0, local_addr, remote_addr, data, data_len);

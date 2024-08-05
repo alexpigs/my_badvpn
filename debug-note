@@ -26,3 +26,16 @@ sudo ip route add default via 172.19.128.1 dev eth0 metric 2
 curl http://ces.gonetos.cn/ip.php
 
 curl -v -k https://ces.gonetos.cn/ip_direct.php?params=DIRECT
+
+
+
+
+
+
+./mx.sh start all 4
+./mx.sh exec network 4
+ ./mx.sh exec phone 3
+
+
+./badvpn-tun2socks --tundev tun0 --netif-ipaddr 10.0.0.2 --netif-netmask 255.255.255.0 --socks-server-addr 103.107.189.5:10089 --username bjzqwl_10.170.210.235 --password bjzqwl123com
+

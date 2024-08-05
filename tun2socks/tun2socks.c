@@ -1087,27 +1087,6 @@ const char* get_protocol_name(uint8_t protocol){
     return "UNKNOW";
 }
 
-int process_dns_data(uint8_t *data, int data_len){
-    struct dns_header *h = (struct dns_header *)(data);
-
-    BLog(BLOG_INFO, "DNS %d bytes: %d %d %d %d %d %d",data_len,
-         h->qr, h->rcode, hton16(h->q_count), h->ans_count, h->auth_count, h->add_count);
-
-    if ( h->qr == 0
-    && h->q_count
-    && h->ans_count == 0
-    && h->auth_count == 0
-    && h->add_count == 0){
-        BLog(BLOG_INFO, "DNS query tuncate and response");
-        h->qr =1;
-        h->tc =1;
-
-        udp_send_packet_to_device(0, local_addr, remote_addr, data, data_len);
-    }
-
-    return 1;
-}
-
 int process_device_udp_packet (uint8_t *data, int data_len)
 {
     ASSERT(data_len >= 0)
@@ -1117,6 +1096,8 @@ int process_device_udp_packet (uint8_t *data, int data_len)
         goto fail;
     }
 
+    BAddr local_addr;
+    BAddr remote_addr;   
     int is_dns;
 
     uint8_t ip_version = 0;
@@ -1126,12 +1107,10 @@ int process_device_udp_packet (uint8_t *data, int data_len)
 
     switch (ip_version) {
         case 4: {
-            // ignore non-UDP packets
             if (data_len < sizeof(struct ipv4_header)) {
                 goto fail;
             }
 
-            // parse IPv4 header
             struct ipv4_header ipv4_header;
             
             // parse IPv4 header
@@ -1139,7 +1118,8 @@ int process_device_udp_packet (uint8_t *data, int data_len)
                 goto fail;
             }
                  
-            if (ipv4_header. != IPV4_PROTOCOL_UDP){
+            // ignore non-UDP packets
+            if (ipv4_header.protocol != IPV4_PROTOCOL_UDP){
                 goto fail;
             }
             struct udp_header udp_header; 
@@ -1155,9 +1135,7 @@ int process_device_udp_packet (uint8_t *data, int data_len)
             if (checksum_in_packet != checksum_computed) {
                 goto fail;
             }
-              
-            BAddr local_addr;
-            BAddr remote_addr;     
+                
             // construct addresses
             BAddr_InitIPv4(&local_addr, ipv4_header.source_address, *(u16_t*)data);
             BAddr_InitIPv4(&remote_addr, ipv4_header.destination_address, *(u16_t*)(data+2));

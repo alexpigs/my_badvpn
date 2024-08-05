@@ -43,6 +43,7 @@
 #include <misc/read_write_int.h>
 
 #define IPV4_PROTOCOL_IGMP 2
+#define IPV4_PROTOCOL_TCP 6
 #define IPV4_PROTOCOL_UDP 17
 
 B_START_PACKED

@@ -1,0 +1,28 @@
+./tun2socks/badvpn-tun2socks --tundev tun0 --netif-ipaddr 10.0.0.2 --netif-netmask 255.255.255.0 --socks-server-addr 103.107.189.5:10089 --username bjzqwl_10.170.210.235 --password bjzqwl123com
+
+
+sudo ip tuntap add dev tun0 mode tun
+sudo ifconfig tun0 10.0.0.1 netmask 255.255.255.0
+sudo route add default gw 10.0.0.2 metric 6
+
+
+ip addr add 10.0.0.1/24 dev tun0
+ip link set dev tun0 up
+
+ip route add default via 10.0.0.2 dev tun0 metric 6
+
+default_gw=$(ip route | grep ^default | awk '{print $3}')
+echo $default_gw
+
+sudo route add 103.107.189.5 gw 172.19.128.1 metric 4
+
+
+sudo ip route del default
+
+sudo ip route add default via 172.19.128.1 dev eth0 metric 2
+
+
+
+curl http://ces.gonetos.cn/ip.php
+
+curl -v -k https://ces.gonetos.cn/ip_direct.php?params=DIRECT

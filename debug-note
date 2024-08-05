@@ -22,6 +22,7 @@ sudo ip route del default
 sudo ip route add default via 172.19.128.1 dev eth0 metric 2
 
 
+ip route add  103.107.189.5 via 172.17.0.1 dev eth0 metric 2
 
 curl http://ces.gonetos.cn/ip.php
 

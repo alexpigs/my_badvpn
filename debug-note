@@ -18,7 +18,6 @@ sudo route add 103.107.189.5 gw 172.19.128.1 metric 4
 
 
 sudo ip route del default
-
 sudo ip route add default via 172.19.128.1 dev eth0 metric 2
 
 
@@ -38,5 +37,31 @@ curl -v -k https://ces.gonetos.cn/ip_direct.php?params=DIRECT
  ./mx.sh exec phone 3
 
 
-./badvpn-tun2socks --tundev tun0 --netif-ipaddr 10.0.0.2 --netif-netmask 255.255.255.0 --socks-server-addr 103.107.189.5:10089 --username bjzqwl_10.170.210.235 --password bjzqwl123com
+./badvpn-tun2socks --tundev tun0 --netif-ipaddr 10.0.0.2 --netif-netmask 255.255.255.0 --socks-server-addr 103.107.189.5:10089 --username bjzqwl_10.170.133.4 --password bjzqwl123com
 
+
+# save default route and set metric , proxy server ip 
+default_gw=$(ip route | grep  -m 1 ^default | awk '{print $3}')
+ip route del default
+ip route add  103.107.189.5 via $default_gw dev eth0 metric 2
+ip route add  8.222.176.41 via $default_gw dev eth0 metric 3
+ip route add default via $default_gw dev eth0 metric 8
+ip route
+
+# create tun and add ip route
+ip tuntap add dev tun0 mode tun
+ip addr add 10.0.0.1/24 dev tun0
+ip link set dev tun0 up
+ip route add default via 10.0.0.2 dev tun0 metric 6
+
+
+
+
+
+
+#v2ray server
+/usr/bin/env v2ray.vmess.aead.forced=false /usr/local/bin/v2ray run -config ~/config.json
+#v2ray client
+ ./v2ray run -config ./config-client.json
+
+./badvpn-tun2socks --tundev tun0 --netif-ipaddr 10.0.0.2 --netif-netmask 255.255.255.0 --socks-server-addr 127.0.0.1:1080 --socks5-udp

@@ -1175,8 +1175,6 @@ int process_device_udp_packet (uint8_t *data, int data_len)
                       ipv4_header.destination_address == netif_ipaddr.ipv4 &&
                       udp_header.dest_port == hton16(53));
 
-
-            
         } break;
         case 6: {
             if (udp_mode == UdpModeNone) {

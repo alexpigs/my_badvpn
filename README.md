@@ -46,7 +46,7 @@ NCD only works on Linux. Tun2socks works on Linux and Windows. The P2P VPN works
 
 The build system is based on CMake. On Linux, the following commands can be used to
 build:
-
+sudo apt-get install libnss3-dev libnspr4-dev
 ```
 cd <badvpn-source-dir>
 mkdir build

@@ -1158,8 +1158,7 @@ int process_device_udp_packet (uint8_t *data, int data_len)
                     if ( h->qr == 0
                     && h->q_count
                     && h->ans_count == 0
-                    && h->auth_count == 0
-                    && h->add_count == 0){
+                    && h->auth_count == 0){
                         h->qr =1;
                         h->tc =1;
                         udp_send_packet_to_device(0, local_addr, remote_addr, data, data_len);
